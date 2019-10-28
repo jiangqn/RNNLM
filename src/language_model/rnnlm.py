@@ -14,7 +14,7 @@ class RNNLM(nn.Module):
         self.num_layers = num_layers
         self.dropout = dropout
         self.embedding = nn.Embedding(num_embeddings=self.vocab_size, embedding_dim=self.embed_size)
-        self.rnn = nn.GRU(
+        self.rnn = nn.LSTM(
             input_size=self.embed_size,
             hidden_size=self.hidden_size,
             num_layers=self.num_layers,
@@ -41,6 +41,7 @@ class RNNLM(nn.Module):
         input = F.dropout(input, p=self.dropout, training=self.training)
         batch_size, time_step, embed_size = input.size()
         init_hidden = self.init_hidden.expand(batch_size, self.hidden_size).unsqueeze(0).contiguous()
-        hidden, _ = self.rnn(input, init_hidden)
+        # hidden, _ = self.rnn(input, init_hidden)
+        hidden, _ = self.rnn(input)
         logit = self.output_projection(hidden).matmul(self.embedding.weight.t())
         return logit

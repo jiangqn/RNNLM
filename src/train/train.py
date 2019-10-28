@@ -1,14 +1,16 @@
 import os
 import yaml
 import math
+import torch
 from torch import nn
 from torch import optim
 from torch.utils.data.dataloader import DataLoader
 from src.language_model.rnnlm import RNNLM
 from src.data_process.dataset import LMDataset
-from src.utils.constants import PAD_INDEX
+from src.utils.constants import PAD_INDEX, INF
 from src.utils.logger import Logger
 from src.train.eval import eval
+from src.utils.sentence_clip import sentence_clip
 
 def train(args):
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu)
@@ -17,6 +19,7 @@ def train(args):
     processed_train_path = os.path.join(processed_base_path, 'train.npz')
     processed_valid_path = os.path.join(processed_base_path, 'valid.npz')
     glove_path = os.path.join(processed_base_path, 'glove.npy')
+    save_path = os.path.join(processed_base_path, 'rnnlm.pkl')
     log_base_path = os.path.join(base_path, 'log')
     log_path = os.path.join(log_base_path, 'train_log.txt')
     data_log_path = os.path.join(log_base_path, 'data_log.yml')
@@ -53,6 +56,8 @@ def train(args):
     criterion = nn.CrossEntropyLoss(ignore_index=PAD_INDEX)
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     logger.log('train start')
+    min_val_ppl = INF
+    early_stop_count = 0
     for epoch in range(args.epoches):
         total_tokens = 0
         total_loss = 0
@@ -77,3 +82,15 @@ def train(args):
                 val_loss, val_ppl = eval(model, valid_loader, criterion)
                 logger.log('[epoch %d step %4d] train_loss: %.4f\ttrain_ppl: %.4f\tval_loss: %.4f\tval_ppl: %.4f' %
                            (epoch, i, train_loss, train_ppl, val_loss, val_ppl))
+                if val_ppl < min_val_ppl:
+                    min_val_ppl = val_ppl
+                    torch.save(model, save_path)
+                    early_stop_count = 0
+                else:
+                    early_stop_count += 100
+                    if early_stop_count >= 5000:
+                        break
+        if early_stop_count >= 5000:
+            break
+    logger.log('min_val_ppl: %.4f' % min_val_ppl)
+    logger.log('train finish')
